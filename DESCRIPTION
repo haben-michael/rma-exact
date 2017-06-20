@@ -1,0 +1,16 @@
+Package: rma.exact
+Title: Exact CIs for random effects meta-analyses
+Version: 0.0.0.9000
+Authors@R: as.person(c(
+    "Haben Michael <haben.michael@stanford.edu> [aut, cre]", 
+    "Lu Tian <...> [aut]"
+  ))
+Description: Compute an exact CI for the population mean under a random effects model.
+Depends: R (>= 3.2.1)
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.0.1.9000
+Imports:
+	metafor,
+	abind
