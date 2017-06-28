@@ -3,7 +3,7 @@
 ##' 
 ##' @param yi a vector containing the primary study measurements
 ##' @param vi a vector of the same length as yi containing the variances of the of the primary study measurements contained in yi
-##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to 1 
+##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to .2 if length(y)>=6 and .6 otherwise
 ##' @param level the level of the confidence interval; defaults to .05
 ##' @param plot indicator whether to plot the contour of the confidence region; defaults to TRUE
 ##' @param tau2.bounds upper and lower bounds for the range of population variance values for constructing the confidence region; if NULL, value will be calculated from tau2.alpha
@@ -24,7 +24,7 @@
 ##' Z <- matrix(rnorm(K*5e3),nrow=K)
 ##' rma.exact.fast(yi,vi,resolution=5e2)
 ##' @export       
-rma.exact.fast <- function(yi,vi,c0=(.2*(length(yi)>=6)+(.6*(length(yi)<6)),level=.05,plot=TRUE,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,tau2.alpha=.995) {
+rma.exact.fast <- function(yi,vi,c0=.2*(length(yi)>=6)+.6*(length(yi)<6),level=.05,plot=TRUE,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,tau2.alpha=.995) {
     
     resolution.tau2 <- resolution
     K <- length(yi)
@@ -183,7 +183,7 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 ##' 
 ##' @param yi a vector containing the primary study measurements
 ##' @param vi a vector of the same length as yi containing the variances of the of the primary study measurements contained in yi
-##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to 1 
+##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to .2 if length(y)>=6 and .6 otherwise
 ##' @param level the level of the confidence interval; defaults to .05
 ##' @param mu.bounds upper and lower bounds for the range of population effect values for constructing the confidence region; if NULL, value will be calculated from mu.alpha
 ##' @param tau2.bounds upper and lower bounds for the range of population variance values for constructing the confidence region; if NULL, value will be calculated from tau2.alpha
@@ -233,7 +233,7 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 ##' plot(rma0)
 ##' confint(rma0,levels=c(.05))
 ##' @export
-rma.exact <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,resolution.mu=resolution,resolution.tau2=resolution,mu.alpha=.995,tau2.alpha=.995,test.stat=NULL,...) {
+rma.exact <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution= 1e2,Z=NULL,B=3e3,resolution.mu=resolution,resolution.tau2=resolution,mu.alpha=.995,tau2.alpha=.995,test.stat=NULL,...) {
     if(is.null(test.stat)) return(rma.exact.c0(yi=yi,vi=vi,c0=c0,mu.bounds=mu.bounds,tau2.bounds=tau2.bounds,resolution=resolution,Z=Z,B=B,resolution.mu=resolution.mu,resolution.tau2=resolution.tau2,mu.alpha=mu.alpha,tau2.alpha=tau2.alpha))
 
     K <- length(yi)
