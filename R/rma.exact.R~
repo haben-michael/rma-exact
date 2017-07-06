@@ -1,11 +1,9 @@
-## require(metafor)
-## require(abind)
 
 ##' Compute a confidence interval for the grand mean at a user-specified level.
 ##' 
 ##' @param yi a vector containing the primary study measurements
 ##' @param vi a vector of the same length as yi containing the variances of the of the primary study measurements contained in yi
-##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to 1 
+##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to .2 if length(y)>=6 and .6 otherwise
 ##' @param level the level of the confidence interval; defaults to .05
 ##' @param plot indicator whether to plot the contour of the confidence region; defaults to TRUE
 ##' @param tau2.bounds upper and lower bounds for the range of population variance values for constructing the confidence region; if NULL, value will be calculated from tau2.alpha
@@ -15,6 +13,7 @@
 ##' @param B the number of monte carlo replicates per primary study observation to be used; defaults to 300
 ##' @param tau2.alpha the level of the exact CI with which to bounds on population variance when constructing the confidence region
 ##' @return a matrix with length(c0) rows and each row containing the lower and upper endpoints of the confidence interval for the given mixing parameter
+##' @seealso \code{\link{rma.exact}} for computing entire confidence regions
 ##' @examples
 ##' 
 ##' set.seed(1)
@@ -24,8 +23,8 @@
 ##' vi <- (seq(1, 5, length=K))^2
 ##' Z <- matrix(rnorm(K*5e3),nrow=K)
 ##' rma.exact.fast(yi,vi,resolution=5e2)
-        
-rma.exact.fast <- function(yi,vi,c0=1,level=.05,plot=TRUE,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,tau2.alpha=.995) {
+##' @export       
+rma.exact.fast <- function(yi,vi,c0=.2*(length(yi)>=6)+.6*(length(yi)<6),level=.05,plot=TRUE,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,tau2.alpha=.995) {
     
     resolution.tau2 <- resolution
     K <- length(yi)
@@ -73,11 +72,13 @@ rma.exact.fast <- function(yi,vi,c0=1,level=.05,plot=TRUE,tau2.bounds=NULL,resol
         v <- -2*mu.DL.obs*ss - c0.i*colSums(yi/weights)
         w <- (c0.i/2)*(colSums(yi^2/weights) + colSums(log(weights/(tau2.DL.obs+vi))) - sum((yi-mu.DL.obs)^2/(tau2.DL.obs+vi))) + mu.DL.obs^2*ss - q
         ## print(    cbind(lower=(-v-sqrt(v^2-4*u*w))/(2*u),upper=(-v+sqrt(v^2-4*u*w))/(2*u)))
-        cbind(lower=(-v-sqrt(v^2-4*u*w))/(2*u),upper=(-v+sqrt(v^2-4*u*w))/(2*u))
+        det <- v^2-4*u*w
+        det[det<0] <- NA
+        cbind(lower=(-v-sqrt(det))/(2*u),upper=(-v+sqrt(det))/(2*u))
     })
     ## print(CI.by.c0)
 
-    CIs <- lapply(CI.by.c0,function(CI.by.tau2)c(min(CI.by.tau2[,'lower']),max(CI.by.tau2[,'upper'])))
+    CIs <- lapply(CI.by.c0,function(CI.by.tau2)c(min(CI.by.tau2[,'lower'],na.rm=TRUE),max(CI.by.tau2[,'upper'],na.rm=TRUE)))
     CIs <- matrix(unlist(CIs),nrow=2)
     rownames(CIs) <- c('lower','upper')
     colnames(CIs) <- c0
@@ -89,7 +90,7 @@ rma.exact.fast <- function(yi,vi,c0=1,level=.05,plot=TRUE,tau2.bounds=NULL,resol
 
     colors <- cm.colors(length(c0))
     if(plot){
-        plot(x=NULL,y=NULL,xlim=range(CI.by.c0),ylim=range(tau2),xlab=expression(mu),ylab=expression(tau^2))
+        plot(x=NULL,y=NULL,xlim=range(CI.by.c0,na.rm=TRUE),ylim=range(tau2),xlab=expression(mu),ylab=expression(tau^2))
         for(i in 1:length(c0)) {
             lines(CI.by.c0[,'lower',i],tau2,col=colors[i])
             lines(CI.by.c0[,'upper',i],tau2,col=colors[i])
@@ -104,10 +105,14 @@ rma.exact.fast <- function(yi,vi,c0=1,level=.05,plot=TRUE,tau2.bounds=NULL,resol
 }
 
 
-rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=ncol(Z),resolution.mu=resolution,resolution.tau2=resolution,mu.alpha=.995,tau2.alpha=.995) {
+rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,resolution.mu=resolution,resolution.tau2=resolution,mu.alpha=.995,tau2.alpha=.995) {
 
     K <- length(yi)
-    if(is.null(Z)) Z <- matrix(rnorm(B*K),nrow=K)
+    if(is.null(Z)) {
+        Z <- matrix(rnorm(B*K),nrow=K)
+    } else {
+        B <- ncol(Z)
+    }
     if(is.null(mu.bounds)) {
         fit=metafor::rma.uni(yi=yi, vi=vi, method="DL")
         mu.bounds <- fit$b+c(-1,1)*fit$se*qt(mu.alpha,df=K-1)
@@ -178,7 +183,7 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 ##' 
 ##' @param yi a vector containing the primary study measurements
 ##' @param vi a vector of the same length as yi containing the variances of the of the primary study measurements contained in yi
-##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to 1 
+##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to .2 if length(y)>=6 and .6 otherwise
 ##' @param level the level of the confidence interval; defaults to .05
 ##' @param mu.bounds upper and lower bounds for the range of population effect values for constructing the confidence region; if NULL, value will be calculated from mu.alpha
 ##' @param tau2.bounds upper and lower bounds for the range of population variance values for constructing the confidence region; if NULL, value will be calculated from tau2.alpha
@@ -192,12 +197,14 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 ##' @param tau2.alpha  the level of the exact CI for constructing the bounds on the population variance dimension of the bounding box
 ##' @param test.stat (currently for internal use)
 ##' @param ... (currently for internal use)
-##' @return an object of class  RMA.Exact 
+##' @return an object of class  RMA.Exact
+##' @seealso \code{\link{rma.exact.fast}} for computing confidence intervals at specified levels, \code{\link{plot.RMA.Exact}}, \code{\link{confint.RMA.Exact}}
 ##' @examples
 ##' set.seed(1)
 ##' 
 ##' K <- 5
 ##' c0 <- 1
+##' mu0 <- 0
 ##' tau2 <- 12.5
 ##' vi <- (seq(1, 5, length=K))^2
 ##' yi=rnorm(K)*sqrt(vi+tau2)+mu0
@@ -225,12 +232,16 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 ##' rma0 <- rma.exact(yi=yi,vi=vi,Z=Z,resolution=resolution,c0=c0,tau2.bounds=c(1,450),resolution.tau2=1e3,resolution.mu=1e2)
 ##' plot(rma0)
 ##' confint(rma0,levels=c(.05))
-
-rma.exact <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,resolution.mu=resolution,resolution.tau2=resolution,mu.alpha=.995,tau2.alpha=.995,test.stat=NULL,...) {
+##' @export
+rma.exact <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution= 1e2,Z=NULL,B=3e3,resolution.mu=resolution,resolution.tau2=resolution,mu.alpha=.995,tau2.alpha=.995,test.stat=NULL,...) {
     if(is.null(test.stat)) return(rma.exact.c0(yi=yi,vi=vi,c0=c0,mu.bounds=mu.bounds,tau2.bounds=tau2.bounds,resolution=resolution,Z=Z,B=B,resolution.mu=resolution.mu,resolution.tau2=resolution.tau2,mu.alpha=mu.alpha,tau2.alpha=tau2.alpha))
 
     K <- length(yi)
-    if(is.null(Z)) Z <- matrix(rnorm(B*K),nrow=K)
+    if(is.null(Z)) {
+        Z <- matrix(rnorm(B*K),nrow=K)
+    } else {
+        B <- ncol(Z)
+    }
     if(is.null(mu.bounds)) {
         fit=metafor::rma.uni(yi=yi, vi=vi, method="DL")
         mu.bounds <- fit$b+c(-1,1)*fit$se*qt(mu.alpha,df=K-1)
@@ -271,37 +282,23 @@ rma.exact <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1e2,
 ##' @param rma1 the first RMA.Exact object
 ##' @param rma2 the second RMA.Exact object
 ##' @return an object of class RMA.Exact
+##' @export
 `+.RMA.Exact` <- function(rma1,rma2) {
     structure(rbind(rma1,rma2))
 }
 
 
-## plot.RMA.Exact <- function(rma0,levels=c(.01,.02,.05,.1,.15,.2),...) {
-##     mu <- as.numeric(rownames(rma0))
-##     tau2 <- as.numeric(colnames(rma0))
-##     image(mu,tau2,structure(rma0,'class'='matrix'),col=cm.colors(12),xlab=expression(mu),ylab=expression(tau^2))
-##     contour(mu,tau2,rma0,add=T,levels=levels,...)
-## }
-
-## ## support for non-square grid points
-## plot.RMA.Exact <- function(rma0,levels=c(.01,.02,.05,.1,.15,.2),...) {
-##     stopifnot(length(unique(rma0$c0))==1)
-##     df.cnt <- getContourLines(as.data.frame(select(rename(rma0,x=mu,y=tau2,z=p.val),x,y,z)), levels=levels)#,...)
-##     df.cnt$z <- as.factor(df.cnt$z)
-##     df.cnt <- rename(df.cnt,mu=x,tau2=y,p.val=z)
-##     plt <- ggplot(df.cnt,aes(x=mu,y=tau2,group=Group,color=p.val))+geom_path()+theme_bw()+scale_color_manual(values=brewer.pal(length(levels),'PuBu'))
-##     plt+labs(x=expression(mu),y=expression(tau^2))
-## }
-
 ##' Plot a confidence region given by an RMA.Exact object
-##'
+##' 
 ##' @param rma0 an object of class RMA.Exact
 ##' @param levels the significance levels to plot
+##' @param mfrow the dimensions of the array of plotting windows for use when rma0 contains regions for multiple weight parameters; defaults to a single row with as many as columns as regions
+##' contained in rma0
 ##' @param ... additional parameters passed down to graphics::contour (passed from there down to plot.window)
 ##' @return undefined
 ##' @examples
 ##' see ?RMA.Exact
-
+##' @export
 plot.RMA.Exact <- function(rma0,levels=c(.01,.02,.05,.1,.15,.2),mfrow=c(1,dim(rma0)[3]),...) {
     if(length(dim(rma0))==2) {
         dim(rma0) <- c(dim(rma0),1)
@@ -331,6 +328,7 @@ plot.RMA.Exact <- function(rma0,levels=c(.01,.02,.05,.1,.15,.2),mfrow=c(1,dim(rm
 ##' endpoints were obtained, etc.
 ##' @examples
 ##' see ?RMA.Exact
+##' @export
 confint.RMA.Exact <- function(rma0,levels=.05,...) {
     mu <- attr(rma0,'mu')
     tau2 <- attr(rma0,'tau2')
@@ -387,370 +385,142 @@ tau2.ci <- function(yi,vi,level=.995) {
 
 
 
-
-## confint.RMA.Exact <- function(rma0,alpha=.05,...) {
-
-##     CI.list <- lapply(split(rma0,rma0$c0),function(rma00) {
-##         df.cnt <- getContourLines(as.data.frame(select(rename(rma00,x=mu,y=tau2,z=p.val),x,y,z)),levels=alpha)#,...)
-##         ## CI <- aggregate(x ~ z, data=df.cnt, function(x0)c(mu.lower=min(x0),mu.upper=max(x0),length=max(x0)-min(x0)))
-##         CI <- group_by(df.cnt,z) %>% summarize(mu.lower=min(x),mu.upper=max(x),tau2.lower=y[which.min(x)],tau2.upper=y[which.max(x)],length=max(x)-min(x)) %>% rename(alpha=z) %>% as.data.frame
-##         CI$c0 <- rma00$c0[1]
-##         return(CI)
+## Lu's version
 
 
-##         ## df.cnt$y <- round(df.cnt$y,2) ## TODO better smoothing
-##         ## CI <- aggregate(x ~ y + z, data=df.cnt,function(x)c(min.mu=min(x),max.mu=max(x),length=max(x)-min(x),n=length(x)))
-##         ## CI <- data.frame(tau2=CI$y,p.val=CI$z,as.data.frame(CI$x),c0=unique(rma0$c0))
+rma.null=function(tau0, thetahat, varhat, error.mat, c0=1)
+   {K=length(thetahat)
+    B=length(error.mat[1,])
+    L=length(c0)
 
-##         ## ## plot(c(CI$min.mu,CI$max.mu),c(CI$tau2,CI$tau2))
-##         ## ## plot(CI$length,CI$tau2)
-##         ## group_by(CI,p.val) %>% slice(which.max(length)) %>% as.matrix
+    theta.star=error.mat*sqrt(varhat+tau0)
+    weight.ini=1/varhat
+    mu.ini=apply(theta.star*weight.ini,2,sum)/sum(weight.ini)
+    tau.sim=pmax((apply(t(t(theta.star)-mu.ini)^2*weight.ini,2,sum)-(K-1))/(sum(weight.ini)-sum(1/varhat^2)/sum(weight.ini)), 0)
+    tau.sim.mat=t(matrix(tau.sim, B, K))
+    weight.dl=1/(tau.sim.mat+varhat)
+    mu.sim=apply(theta.star*weight.dl,2,sum)/apply(weight.dl,2,sum)
 
-##     })
+    test.null=matrix(0, B, L)
+        
+    for(ll in 1:L)
+       {if(min(c0)<Inf) test2.null=apply(theta.star^2/(varhat+tau0)+log(varhat+tau0), 2, sum)-apply( (t(t(theta.star)-mu.sim))^2*weight.dl-log(weight.dl), 2, sum)
+        test1.null=mu.sim^2*apply(weight.dl, 2, sum)    
+        if(c0[ll]<Inf)
+          {test.null[,ll]=test2.null+test1.null*c0[ll]}
+        if(c0[ll]==Inf)
+          {test.null[,ll]=test1.null}    
+        }
 
-##     do.call(rbind,CI.list)
-## }
-
-
-
-## ## using tensorA--more readable code and some speedup
-## rma.exact.tensor <- function(mu,tau2,yi,vi,Z,c0=1) {
-##     K <- length(yi)
-##     B <- ncol(Z)
-
-##     ## vi <- as.tensor(vi,dims=c(K=K))
-##     ## yi <- as.tensor(yi,dims=c(K=K))
-##     inv.vi <- as.tensor(1/vi,dims=c(K=K))
-##     sum.inv.vi <- sum(inv.vi)
-##     mu.fixed.obs <- yi%*%inv.vi/sum.inv.vi
-##     tau2.DL.obs <- max(0, ((yi-mu.fixed.obs)^2%*%inv.vi - (K-1)) / (sum.inv.vi-sum(1/vi^2)/sum(1/vi)))
-##     mu.DL.obs <- sum(yi/(vi+tau2.DL.obs))/sum(1/(vi+tau2.DL.obs))
-
-##     grid.points <- expand.grid(mu,tau2)
-##     N <- length(mu)*length(tau2)
-##     colnames(grid.points) <- c('mu','tau2')
-##     ## T1.obs <- (mu.DL.obs-grid.points$mu)^2 / sum(1/(tau2.DL.obs+vi))
-##     ## TODO move next few lines to end, where these vars are used
-##     T1.obs <- (mu.DL.obs-grid.points$mu)^2 * sum(1/(tau2.DL.obs+vi))
-##     T2.obs <- outer(yi,grid.points$mu,`-`)^2 / outer(vi,grid.points$tau2,`+`) + log(outer(vi,grid.points$tau2,`+`))
-##     ## T2.obs <- (colSums(T2.obs) - sum((yi-mu.DL.obs)^2/(tau2.DL.obs+vi) + log(tau2.DL.obs+vi))) / 2
-##     T2.obs <- (colSums(T2.obs) - sum((yi-mu.DL.obs)^2/(tau2.DL.obs+vi) + log(tau2.DL.obs+vi))) #/ 2
+    return(test.null)
+   }
 
 
-##     ZZ <- to.tensor(as.numeric(Z),c(K=K,B=B))
-##     w.unnormalized <- as.tensor(outer(as.numeric(vi),grid.points$tau2,`+`),dims=c(K=K,N=N))
-##     w <- w.unnormalized/margin.tensor(w.unnormalized,1)
-##     Y <- ZZ*sqrt(w.unnormalized) + as.tensor(grid.points$mu,dims=c(N=N))
-##     mu.fixed <- margin.tensor(Y*(inv.vi/sum.inv.vi),1)
-##     tau2.DL <- (margin.tensor((Y-mu.fixed)^2*inv.vi,1) - (K-1)) / (sum.inv.vi - sum(inv.vi^2)/sum.inv.vi)
-##     tau2.DL[tau2.DL<0] <- 0
-##     ## tau2.DL <- (apply((Y-spread(mu.fixed,K))^2*inv.vi,2:3,sum) - (K-1)) / (sum.inv.vi - sum(inv.vi^2)/sum.inv.vi)
-##     ## tau2.DL <- apply(tau2.DL,1:2,function(x)max(x,0))
-##     w.hat.inv.unnormalized <- 1/(tau2.DL+as.tensor(vi,dims=c(K=K)))
-##     w.hat.inv.sums <- margin.tensor(w.hat.inv.unnormalized,3)
-##     w.hat.inv <- w.hat.inv.unnormalized/w.hat.inv.sums
-##     mu.DL <- margin.tensor(Y*w.hat.inv,1)
+######################################################
+
+tau.ci=function(thetahat, varhat, level=0.999)
+               {test.tau=function(tau2, thetahat, varhat, cov)
+                                 {K=length(varhat)
+                                  weight=1/(varhat+tau2)/sum(1/(varhat+tau2))
+                                  weight.mat=matrix(0, (K-1), K)
+                                  for(i in 1:(K-1))
+                                     {weight.mat[i,]=weight
+                                      weight.mat[i,i]=weight.mat[i,i]-1
+                                      }
+
+                                  varmat=diag(varhat+tau2, K, K)
+                                  sigma=weight.mat%*%varmat%*%t(weight.mat)
+                                  test.stat=t(weight.mat%*%thetahat)%*%solve(sigma)%*%(weight.mat%*%thetahat)
+                                  c0=qchisq(cov, K-1)
+                                  return(as.numeric(test.stat)-c0)
+                                  }  
+                                  
+              if(test.tau(0, thetahat, varhat, 1-level)<=0)
+                ci.upptau=0                 
+                
+              if(test.tau(0, thetahat, varhat, 1-level)>0)  
+                {lower=0
+                 upper=(max(thetahat+3*sqrt(varhat))-min(thetahat-3*sqrt(varhat)))^2/2
+                 while(test.tau(upper, thetahat, varhat, 1-level)>0)                           {lower=upper
+                       upper=1.5*upper}
+
+                 ci.upptau=uniroot(test.tau, c(lower, upper), thetaha=thetahat, varhat=varhat, cov=1-level)$root
+                 }
+               
+                return(c(0, ci.upptau))
+               }
 
 
-##     ## T1 <- (mu.DL-grid.points$mu)^2 * w.hat.inv.sums
-##     T1 <- (mu.DL-as.tensor(grid.points$mu,dims=c(N=N)))^2 * w.hat.inv.sums
-##     T2 <- -(Y - mu.DL)^2 * w.hat.inv.unnormalized + log(w.hat.inv.unnormalized) + ZZ^2 + log(w.unnormalized)
-##     ## T2 <- -(Y - spread(mu.DL,K))^2 * w.hat.inv.unnormalized + log(w.hat.inv.unnormalized) + ZZ^2 + replicate(B,log(w.unnormalized))
-##     ## T2 <- apply(T2,2:3,sum) / 2
-##     ## T2 <- apply(T2,2:3,sum)
-##     T2 <- margin.tensor(T2,1)
+#############################################################
+rma.exact.lu=function(thetahat, varhat,  B=1000, num.tau=300, c0=1, level=0.998){
 
-##     T0.obs <- rowSums(T1.obs<=t(T1)) + rowSums(T2.obs<=t(T2))/c0 ##[[mean or sum affects c0 scale, match to ms]]
-##     T0 <- B+1-t(apply(T1,2,rank)) + (B+1-t(apply(T2,2,rank)))/c0
-
-##     ## for(n in ls())assign(paste0(n,'.old'),get(n))
-##     structure(matrix(rowMeans(T0.obs >=T0),nrow=length(mu)), dimnames=list(round(mu,8),round(tau2,8)), mu=mu, tau2=tau2, class=c('RMA.Exact','matrix'))
-
-## }
-
-## ## optimized--remaining bottlenecks are in calls to rank() and to log()
-## rma.exact.fast <- function(mu,tau2,yi,vi,Z,c0=1) {
-##     K <- length(yi)
-##     B <- ncol(Z)
-
-##     ## vi <- as.tensor(vi,dims=c(K=K))
-##     ## yi <- as.tensor(yi,dims=c(K=K))
-##     inv.vi <- as.tensor(1/vi,dims=c(K=K))
-##     sum.inv.vi <- sum(inv.vi)
-##     mu.fixed.obs <- yi%*%inv.vi/sum.inv.vi
-##     tau2.DL.obs <- max(0, ((yi-mu.fixed.obs)^2%*%inv.vi - (K-1)) / (sum.inv.vi-sum(1/vi^2)/sum(1/vi)))
-##     mu.DL.obs <- sum(yi/(vi+tau2.DL.obs))/sum(1/(vi+tau2.DL.obs))
-
-##     grid.points <- expand.grid(mu,tau2)
-##     N <- length(mu)*length(tau2)
-##     colnames(grid.points) <- c('mu','tau2')
-##     ## T1.obs <- (mu.DL.obs-grid.points$mu)^2 / sum(1/(tau2.DL.obs+vi))
-##     T1.obs <- (mu.DL.obs-grid.points$mu)^2 * sum(1/(tau2.DL.obs+vi))
-##     T2.obs <- outer(yi,grid.points$mu,`-`)^2 / outer(vi,grid.points$tau2,`+`) + log(outer(vi,grid.points$tau2,`+`))
-##     ## T2.obs <- (colSums(T2.obs) - sum((yi-mu.DL.obs)^2/(tau2.DL.obs+vi) + log(tau2.DL.obs+vi))) / 2
-##     T2.obs <- (colSums(T2.obs) - sum((yi-mu.DL.obs)^2/(tau2.DL.obs+vi) + log(tau2.DL.obs+vi))) #/ 2
-
-##     inv.vi <- as.numeric(inv.vi)
-##     ZZ <- to.tensor(as.numeric(Z),c(K=K,B=B))
-##     w.unnormalized <- as.tensor(outer(as.numeric(vi),grid.points$tau2,`+`),dims=c(K=K,N=N))
-##     w <- w.unnormalized/margin.tensor(w.unnormalized,1)
-
-##     for (i in 1:K)
-##         assign(paste0('Y',i), (outer(sqrt(w.unnormalized[i,]),ZZ[i,])+grid.points$mu))
-##     mu.fixed <- Reduce(`+`,lapply(1:K,function(k)get(paste0('Y',k))*(inv.vi[k]/sum.inv.vi)))
-##     tau2.DL <- Reduce(`+`,lapply(1:K,function(k)
-##                                  (get(paste0('Y',k))-mu.fixed)^2*inv.vi[k]
-##                                  ))
-##     tau2.DL <- (tau2.DL - (K-1)) / (sum.inv.vi - sum(inv.vi^2)/sum.inv.vi)
-##     tau2.DL[tau2.DL<0] <- 0
-##     for(k in 1:K)assign(paste0('w.hat.inv.unnormalized',k),1/(tau2.DL+vi[k]))
-##     w.hat.inv.sums <- Reduce(`+`,lapply(1:K,function(k)get(paste0('w.hat.inv.unnormalized',k))))
-##     for(k in 1:K)assign(paste0('w.hat.inv',k),get(paste0('w.hat.inv.unnormalized',k))/w.hat.inv.sums)
-##     mu.DL <- Reduce(`+`,lapply(1:K,function(k)get(paste0('Y',k))*get(paste0('w.hat.inv',k))))
-
-##     T1 <- (mu.DL-grid.points$mu)^2 * w.hat.inv.sums
-##     class(ZZ) <- 'matrix'
-##     class(w.unnormalized) <- 'matrix'
-##     for(k in 1:K)
-##         assign(paste0('T2',k),
-##                t(-(get(paste0('Y',k)) - mu.DL)^2 * get(paste0('w.hat.inv.unnormalized',k)) + log(get(paste0('w.hat.inv.unnormalized',k))) + log(w.unnormalized[k,])) + ZZ[k,]^2
-##                )##bottleneck on log call
-##     T2 <- t(Reduce(`+`,lapply(1:K,function(k)get(paste0('T2',k)))))
-##     T0.obs <- rowSums(T1.obs<=T1) + rowSums(T2.obs<=T2)/c0
-##     T0 <- B+1-t(apply(T1,1,rank)) + (B+1-t(apply(T2,1,rank)))/c0 ##bottleneck on rank
-
-##     structure(matrix(rowMeans(T0.obs >=T0),nrow=length(mu)), dimnames=list(round(mu,8),round(tau2,8)), mu=mu, tau2=tau2, class=c('RMA.Exact','matrix'))
-
-## }
-
-## ## support for multiple c0 values
-## rma.exact.fast <- function(mu=NULL,tau2=NULL,yi=NULL,vi,Z,c0=1,resolution=1e2) {
-##     K <- length(yi)
-##     B <- ncol(Z)
-
-##     if(is.null(mu)) {
-##         fit=rma.uni(yi=yi, vi=vi, method="DL")
-##         mu.bounds <- fit$b+c(-1,1)*fit$se*qnorm(.999)
-##         mu <- sort(runif(resolution)*(diff(mu.bounds))+mu.bounds[1])
-##     }
-##     if(is.null(tau2)) {
-##         tau2.bounds <- tau.ci(thetahat=yi,varhat=vi)
-##         tau2 <- sort(runif(resolution)*(diff(tau2.bounds))+tau2.bounds[1])
-##     }
-
-##     ## vi <- as.tensor(vi,dims=c(K=K))
-##     ## yi <- as.tensor(yi,dims=c(K=K))
-##     inv.vi <- as.tensor(1/vi,dims=c(K=K))
-##     sum.inv.vi <- sum(inv.vi)
-##     mu.fixed.obs <- yi%*%inv.vi/sum.inv.vi
-##     tau2.DL.obs <- max(0, ((yi-mu.fixed.obs)^2%*%inv.vi - (K-1)) / (sum.inv.vi-sum(1/vi^2)/sum(1/vi)))
-##     mu.DL.obs <- sum(yi/(vi+tau2.DL.obs))/sum(1/(vi+tau2.DL.obs))
-
-##     grid.points <- expand.grid(mu,tau2)
-##     N <- length(mu)*length(tau2)
-##     colnames(grid.points) <- c('mu','tau2')
-##     ## T1.obs <- (mu.DL.obs-grid.points$mu)^2 / sum(1/(tau2.DL.obs+vi))
-##     T1.obs <- (mu.DL.obs-grid.points$mu)^2 * sum(1/(tau2.DL.obs+vi))
-##     T2.obs <- outer(yi,grid.points$mu,`-`)^2 / outer(vi,grid.points$tau2,`+`) + log(outer(vi,grid.points$tau2,`+`))
-##     ## T2.obs <- (colSums(T2.obs) - sum((yi-mu.DL.obs)^2/(tau2.DL.obs+vi) + log(tau2.DL.obs+vi))) / 2
-##     T2.obs <- (colSums(T2.obs) - sum((yi-mu.DL.obs)^2/(tau2.DL.obs+vi) + log(tau2.DL.obs+vi))) #/ 2
-
-##     inv.vi <- as.numeric(inv.vi)
-##     ZZ <- to.tensor(as.numeric(Z),c(K=K,B=B))
-##     w.unnormalized <- as.tensor(outer(as.numeric(vi),grid.points$tau2,`+`),dims=c(K=K,N=N))
-##     w <- w.unnormalized/margin.tensor(w.unnormalized,1)
-
-##     for (i in 1:K)
-##         assign(paste0('Y',i), (outer(sqrt(w.unnormalized[i,]),ZZ[i,])+grid.points$mu))
-##     mu.fixed <- Reduce(`+`,lapply(1:K,function(k)get(paste0('Y',k))*(inv.vi[k]/sum.inv.vi)))
-##     tau2.DL <- Reduce(`+`,lapply(1:K,function(k)
-##                                  (get(paste0('Y',k))-mu.fixed)^2*inv.vi[k]
-##                                  ))
-##     tau2.DL <- (tau2.DL - (K-1)) / (sum.inv.vi - sum(inv.vi^2)/sum.inv.vi)
-##     tau2.DL[tau2.DL<0] <- 0
-##     for(k in 1:K)assign(paste0('w.hat.inv.unnormalized',k),1/(tau2.DL+vi[k]))
-##     w.hat.inv.sums <- Reduce(`+`,lapply(1:K,function(k)get(paste0('w.hat.inv.unnormalized',k))))
-##     for(k in 1:K)assign(paste0('w.hat.inv',k),get(paste0('w.hat.inv.unnormalized',k))/w.hat.inv.sums)
-##     mu.DL <- Reduce(`+`,lapply(1:K,function(k)get(paste0('Y',k))*get(paste0('w.hat.inv',k))))
-
-##     T1 <- (mu.DL-grid.points$mu)^2 * w.hat.inv.sums
-##     class(ZZ) <- 'matrix'
-##     class(w.unnormalized) <- 'matrix'
-##     for(k in 1:K)
-##         assign(paste0('T2',k),
-##                t(-(get(paste0('Y',k)) - mu.DL)^2 * get(paste0('w.hat.inv.unnormalized',k)) + log(get(paste0('w.hat.inv.unnormalized',k))) + log(w.unnormalized[k,])) + ZZ[k,]^2
-##                )##bottleneck on log call
-##     T2 <- t(Reduce(`+`,lapply(1:K,function(k)get(paste0('T2',k)))))
-##     ## T0.obs <- rowSums(T1.obs<=T1) + rowSums(T2.obs<=T2)/c0
-##     T0.obs.a <- rowSums(T1.obs<=T1)
-##     T0.obs.b <- rowSums(T2.obs<=T2)
-##     for(i in 1:length(c0))
-##         assign(paste0('T0.obs',i),T0.obs.a + T0.obs.b/c0[i])
-##     ## T0 <- B+1-t(apply(T1,1,rank)) + (B+1-t(apply(T2,1,rank)))/c0 ##bottleneck on rank
-##     T0.a <- B+1-t(apply(T1,1,rank))
-##     T0.b <- (B+1-t(apply(T2,1,rank)))
-##     for(i in 1:length(c0))
-##         assign(paste0('T0',i),T0.a + T0.b/c0[i])
-
-##     ans.list <- lapply(1:length(c0),function(i)
-##                        structure(matrix(rowMeans(get(paste0('T0.obs',i)) >=get(paste0('T0',i))),nrow=length(mu),dimnames=list(round(mu,8),round(tau2,8))), mu=mu, tau2=tau2,
-##                                  class=c('RMA.Exact','matrix'))
-##                        )
-##     if(length(ans.list)==1) ans.list <- ans.list[[1]]
-##     ans.list
-## }
-
-## ## combining test statistics directly, allowing for non-square grid points
-## ## attributes for yi,vi (needed for zoom)
-## rma.exact <- function(grid.points=NULL,yi,vi,Z=NULL,c0=1,resolution=1e2,B=ncol(Z)) {
-##     K <- length(yi)
-
-##     if(is.null(Z)) Z <- matrix(rnorm(B*K),nrow=K)
-##     ## B <- ncol(Z)
-
-##     if(is.null(grid.points)) {
-##         ## if(is.null(mu)) {
-##         fit=rma.uni(yi=yi, vi=vi, method="DL")
-##         mu.bounds <- fit$b+c(-1,1)*fit$se*qt(.99,df=K-1)
-##         mu <- sort(runif(resolution)*(diff(mu.bounds))+mu.bounds[1])
-##         ## }
-##         ## if(is.null(tau2)) {
-##         ## tau2.bounds <- tau.ci(thetahat=yi,varhat=vi,level=.99)
-##         tau2.bounds <- tau2.ci(yi,vi,level=.9)
-##         ## print(tau2.bounds)
-##         tau2 <- sort(runif(resolution)*(diff(tau2.bounds))+tau2.bounds[1])
-##         ## }
-
-##         grid.points <- expand.grid(mu,tau2)
-##         colnames(grid.points) <- c('mu','tau2')
-##     }
-
-##     N <- nrow(grid.points)
-##     mu <- grid.points$mu
-##     tau2 <- grid.points$tau2
-
-##     ## vi <- as.tensor(vi,dims=c(K=K))
-##     ## yi <- as.tensor(yi,dims=c(K=K))
-##     inv.vi <- as.tensor(1/vi,dims=c(K=K))
-##     sum.inv.vi <- sum(inv.vi)
-##     mu.fixed.obs <- yi%*%inv.vi/sum.inv.vi
-##     tau2.DL.obs <- max(0, ((yi-mu.fixed.obs)^2%*%inv.vi - (K-1)) / (sum.inv.vi-sum(1/vi^2)/sum(1/vi)))
-##     mu.DL.obs <- sum(yi/(vi+tau2.DL.obs))/sum(1/(vi+tau2.DL.obs))
-
-##     ## T1.obs <- (mu.DL.obs-grid.points$mu)^2 / sum(1/(tau2.DL.obs+vi))
-##     T1.obs <- (mu.DL.obs-grid.points$mu)^2 * sum(1/(tau2.DL.obs+vi))
-##     T2.obs <- outer(yi,grid.points$mu,`-`)^2 / outer(vi,grid.points$tau2,`+`) + log(outer(vi,grid.points$tau2,`+`))
-##     T2.obs <- (colSums(T2.obs) - sum((yi-mu.DL.obs)^2/(tau2.DL.obs+vi) + log(tau2.DL.obs+vi))) #/ 2
-
-##     inv.vi <- as.numeric(inv.vi)
-##     ZZ <- to.tensor(as.numeric(Z),c(K=K,B=B))
-##     w.unnormalized <- as.tensor(outer(as.numeric(vi),grid.points$tau2,`+`),dims=c(K=K,N=N))
-##     w <- w.unnormalized/margin.tensor(w.unnormalized,1)
-
-##     for (i in 1:K)
-##         assign(paste0('Y',i), (outer(sqrt(w.unnormalized[i,]),ZZ[i,])+grid.points$mu))
-##     mu.fixed <- Reduce(`+`,lapply(1:K,function(k)get(paste0('Y',k))*(inv.vi[k]/sum.inv.vi)))
-##     tau2.DL <- Reduce(`+`,lapply(1:K,function(k)
-##                                  (get(paste0('Y',k))-mu.fixed)^2*inv.vi[k]
-##                                  ))
-##     tau2.DL <- (tau2.DL - (K-1)) / (sum.inv.vi - sum(inv.vi^2)/sum.inv.vi)
-##     tau2.DL[tau2.DL<0] <- 0
-##     for(k in 1:K)assign(paste0('w.hat.inv.unnormalized',k),1/(tau2.DL+vi[k]))
-##     w.hat.inv.sums <- Reduce(`+`,lapply(1:K,function(k)get(paste0('w.hat.inv.unnormalized',k))))
-##     for(k in 1:K)assign(paste0('w.hat.inv',k),get(paste0('w.hat.inv.unnormalized',k))/w.hat.inv.sums)
-##     mu.DL <- Reduce(`+`,lapply(1:K,function(k)get(paste0('Y',k))*get(paste0('w.hat.inv',k))))
-
-##     T1 <- (mu.DL-grid.points$mu)^2 * w.hat.inv.sums
-##     class(ZZ) <- 'matrix'
-##     class(w.unnormalized) <- 'matrix'
-##     for(k in 1:K)
-##         assign(paste0('T2',k),
-##                t(-(get(paste0('Y',k)) - mu.DL)^2 * get(paste0('w.hat.inv.unnormalized',k)) + log(get(paste0('w.hat.inv.unnormalized',k))) + log(w.unnormalized[k,])) + ZZ[k,]^2
-##                )##bottleneck on log call
-##     T2 <- t(Reduce(`+`,lapply(1:K,function(k)get(paste0('T2',k)))))
-##     for(i in 1:length(c0))
-##         assign(paste0('T0.obs',i),T1.obs + T2.obs/c0[i])
-##     for(i in 1:length(c0))
-##         assign(paste0('T0',i),T1 + T2/c0[i])
-
-##     ## ans.list <- lapply(1:length(c0),function(i)
-##     ##                    structure(matrix(rowMeans(get(paste0('T0.obs',i)) <=get(paste0('T0',i))),nrow=length(mu),dimnames=list(round(mu,8),round(tau2,8))), mu=mu, tau2=tau2,
-##     ##                              class=c('RMA.Exact','matrix'))
-##     ##                    )
-##     ## if(length(ans.list)==1) ans.list <- ans.list[[1]]
-##     ans.list <- lapply(1:length(c0),function(i)
-##                        structure(data.frame(mu=grid.points$mu,tau2=grid.points$tau2,p.val=rowMeans(get(paste0('T0.obs',i)) <=get(paste0('T0',i))),c0=c0[i]),
-##                                  class=c('RMA.Exact','data.frame'),yi=yi,vi=vi)
-##                        )
-##     ans <- do.call(rbind,ans.list)
-## }
+c0=sort(unique(c0))
+L=length(c0)
+K=length(varhat)
+set.seed(100)
+error.mat=matrix(rnorm(B*K), K, B)
 
 
-## ## df <- data.frame(x=grid.points$mu,y=grid.points$tau2,z=rowMeans(get(paste0('T0.obs',i)) <=get(paste0('T0',i))))
-## ## df.cnt <- getContourLines(df,nlevels=3)
-## ## ggplot(df.cnt,aes(x=x,y=y,group=Group,color=z))+geom_path()+theme_bw()
+fit.obs=rma.uni(yi=thetahat, vi=varhat, method="DL") 
+muhat=as.numeric(fit.obs$b)
+tauhat=fit.obs$tau2
+
+sigmainv.hat=sum(1/(tauhat+varhat))
+llk.obs=sum(-(thetahat-muhat)^2/(varhat+tauhat)-log(varhat+tauhat))
+
+citau=tau.ci(thetahat, varhat, level=level)
+tau.sup=citau[2]
+tau.inf=citau[1]
 
 
-## ## helper to run base contourLines if grid of p-values is available, otherwise contoureR
-## contourLines.RMA.Exact <- function(rma0,levels) {
-##     mu <- unique(rma0$mu) %>% sort
-##     tau2 <- unique(rma0$tau2) %>% sort
-##     if(length(mu)*length(tau2)==nrow(rma0)) {
-##         rma0.mtx <- matrix(rma0$p.val, nrow=length(mu))
-##         contour.lst <- contourLines(mu,tau2,rma0.mtx,levels=levels)
-##         return(do.call(rbind, lapply(contour.lst,function(df)data.frame(x=df$x,y=df$y,z=df$level))))
-##     } else {
-##         return(getContourLines(as.data.frame(select(rename(rma.lower,x=mu,y=tau2,z=p.val),x,y,z)),levels=levels) %>% select(-LID,-GID,-PID,-Group))
-##     }
-## }
+step.tau=qnorm((1:num.tau)/(2*num.tau+1)+0.5)
+step.tau=(tau.sup-tau.inf)/sum(step.tau)*step.tau
+step.tau=c(step.tau, step.tau[num.tau])
 
-## zoom <- function(rma0,alpha=.05,scale=1.5,resolution=5e1,plot=TRUE) {
-##     yi <- attr(rma0,'yi')
-##     vi <- attr(rma0,'vi')
-##     sd.mu <- sd(rma0$mu)
-##     sd.tau2 <- sd(rma0$tau2)
-##     CI <- confint(rma0,alpha=alpha)
-##     stopifnot(nrow(CI)==1)
-##     tau2.lower <- pmax(0,runif(5e1)*scale*sd.tau2 + (CI[,'tau2.lower']-scale*sd.tau2/2)) %>% unique %>% sort
-##     mu.lower <- (runif(5e1)*scale*sd.mu + (CI[,'mu.lower']-scale*sd.mu/2)) %>% sort
-##     rma.lower <- rma.exact(grid.points=expand.grid(mu=mu.lower,tau2=tau2.lower),yi=yi,vi=vi,B=1e3)
-##     tau2.upper <- pmax(0,runif(5e1)*scale*sd.tau2 + (CI[,'tau2.upper']-scale*sd.tau2/2)) %>% unique %>% sort
-##     mu.upper <- (runif(5e1)*scale*sd.mu + (CI[,'mu.upper']-scale*sd.mu/2)) %>% sort
-##     rma.upper <- rma.exact(grid.points=expand.grid(mu=mu.upper,tau2=tau2.upper),yi=yi,vi=vi,B=1e3)
+##################################################################################
+
+tau.up=tauhat+cumsum(step.tau)
+tau.down=tauhat-cumsum(step.tau)
+
+tau.grd=c(rev(tau.down), tauhat, tau.up)
+tau.grd=tau.grd[tau.grd>=0 & tau.grd<=tau.sup]
+
+ntau=length(tau.grd)
 
 
-##     if(plot) {
-##         ## upper.lines <- contourLines.RMA.Exact(as.data.frame(select(rename(rma.upper,x=mu,y=tau2,z=p.val),x,y,z)),levels=alpha) %>% mutate(group='upper')
-##         ## ## plot(y ~ x, data=cc)
-##         ## lower.lines <- contourLines.RMA.Exact(as.data.frame(select(rename(rma.lower,x=mu,y=tau2,z=p.val),x,y,z)),levels=alpha) %>% mutate(group='lower')
-##         upper.lines <- contourLines.RMA.Exact(rma.upper,levels=alpha) %>% mutate(group='upper')
-##         ## plot(y ~ x, data=cc)
-##         lower.lines <- contourLines.RMA.Exact(rma.lower,levels=alpha) %>% mutate(group='lower')
-##         new.lines <- rbind(upper.lines,lower.lines) %>% mutate(p.val=paste0('new ',alpha))
-##         plt <- plot(rma0)
-##         nlevels <- length(unique(plt$data$p.val))
+test.cut=matrix(NA, ntau, L)
+for(b in 1:ntau)
+   {tau.new=tau.grd[b]
+    test.null=rma.null(tau0=tau.new, thetahat=thetahat, varhat=varhat, error.mat=error.mat, c0=c0)
+    for(ll in 1:L)
+       test.cut[b, ll]=quantile(test.null[,ll], 0.95)
+    }
 
-##         suppressMessages(plt <- plt+geom_path(data=new.lines,aes(x=x,y=y,group=group,color=p.val))+scale_color_manual(values=c(brewer.pal(nlevels,'PuBu'),'red')))
-##         print(plt)
-##     }
+aa=bb=cc=matrix(0, ntau, L)
 
-##     ## plot(y~x,data=lower.lines)
-##     ## new.lines <- getContourLines(rbind(as.data.frame(select(rename(rma.upper,x=mu,y=tau2,z=p.val),x,y,z)),as.data.frame(select(rename(rma.lower,x=mu,y=tau2,z=p.val),x,y,z))),levels=.05)
-##     ## plot(y~x,data=new.lines)
+thetahat.mat=t(matrix(rep(thetahat, ntau), K, ntau))
+varhat.mat=t(matrix(rep(varhat, ntau), K, ntau))
 
-##     ## lower.lines <- contourLines(mu,tau2,matrix(rma.lower$p.val,nrow=length(mu)),levels=alpha)
-##     ## lower.lines <- mutate(as.data.frame(lower.lines),p.val=paste0('new ',alpha),group='upper')
-##     ## ## plt <- plt+geom_path(data=lower.lines,aes(x=x,y=y,group=p.val,color=p.val))+scale_color_manual(values=c(cm.colors(6),'red'))
-##     ## upper.lines <- contourLines(mu.upper,tau2,matrix(rma.upper$p.val,nrow=length(unique(rma.upper$mu))),levels=alpha)
-##     ## upper.lines <- mutate(as.data.frame(upper.lines),p.val=paste0('new ',alpha),group='lower')
-##     ## new.lines <- rbind(upper.lines,lower.lines)
-##     ## ## invisible(plt <- plt+geom_path(data=new.lines,aes(x=x,y=y,group=group,color=p.val))+scale_color_manual(values=c(cm.colors(6),'red')))
-##     ## ## return(plt)
-##     ## plt <- plot(rma0)
-##     ## nlevels <- length(unique(plt$data$p.val))
+cc=t(matrix(rep(c0*muhat^2*sigmainv.hat, ntau), L, ntau))+llk.obs+apply(thetahat.mat^2/(varhat.mat+tau.grd)+log(varhat.mat+tau.grd),1,sum)-test.cut
+bb=-2*(t(matrix(rep(c0*muhat*sigmainv.hat, ntau), L, ntau))+apply(thetahat.mat/(varhat.mat+tau.grd),1,sum))
+aa=t(matrix(rep(c0*sigmainv.hat, ntau), L, ntau))+apply(1/(varhat.mat+tau.grd),1,sum)
 
-##     ## suppressMessages(plt <- plt+geom_path(data=new.lines,aes(x=x,y=y,group=group,color=p.val))+scale_color_manual(values=c(cm.colors(nlevels),'red')))
-##     ## plt
+if(max(c0)==Inf)
+  {cc[,L]=muhat^2*sigmainv.hat-test.cut[,L]
+   bb[,L]=-2*muhat*sigmainv.hat
+   aa[,L]=sigmainv.hat
+   }
 
-##     return(rma.lower+rma.upper)
-## }
+delta=bb^2-4*aa*cc
+delta[delta<0]=0
+delta=sqrt(delta)
+mu.min=(-bb-delta)/2/aa
+mu.max=(-bb+delta)/2/aa
+
+   
+ci.low=apply(mu.min,2,min)
+ci.upp=apply(mu.max,2,max)
+
+return(list(ci=cbind(c0, ci.low, ci.upp), tau.grd=tau.grd, mu.min=mu.min, mu.max=mu.max))
+}
+

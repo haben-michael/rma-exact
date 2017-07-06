@@ -1,6 +1,6 @@
 
 ##' Compute a confidence interval for the grand mean at a user-specified level.
-##' 
+##'
 ##' @param yi a vector containing the primary study measurements
 ##' @param vi a vector of the same length as yi containing the variances of the of the primary study measurements contained in yi
 ##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to .2 if length(y)>=6 and .6 otherwise
@@ -15,7 +15,7 @@
 ##' @return a matrix with length(c0) rows and each row containing the lower and upper endpoints of the confidence interval for the given mixing parameter
 ##' @seealso \code{\link{rma.exact}} for computing entire confidence regions
 ##' @examples
-##' 
+##'
 ##' set.seed(1)
 ##' K <- 4
 ##' c0 <- c(.5,1)
@@ -23,9 +23,9 @@
 ##' vi <- (seq(1, 5, length=K))^2
 ##' Z <- matrix(rnorm(K*5e3),nrow=K)
 ##' rma.exact.fast(yi,vi,resolution=5e2)
-##' @export       
-rma.exact.fast <- function(yi,vi,c0=.2*(length(yi)>=6)+.6*(length(yi)<6),level=.05,plot=TRUE,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,tau2.alpha=.995) {
-    
+##' @export
+rma.exact.fast <- function(yi,vi,c0=1.2*(length(yi)<6)+.6*(length(yi)>=6 & length(yi)<10)+.2*(length(yi)>=10),level=.05,plot=TRUE,tau2.bounds=NULL,resolution=1e2,Z=NULL,B=3e3,tau2.alpha=.995) {
+
     resolution.tau2 <- resolution
     K <- length(yi)
     if(is.null(Z)) {
@@ -62,9 +62,9 @@ rma.exact.fast <- function(yi,vi,c0=.2*(length(yi)>=6)+.6*(length(yi)<6),level=.
     T2 <- T2/2
 
     ss <- sum(1/(vi+tau2.DL.obs))
-    
+
     CI.by.c0 <- lapply(c0,function(c0.i) {
-        
+
         T0 <- T1 + T2*c0.i
         q <- apply(T0,1,function(cdf)quantile(cdf,probs=1-level))
 
@@ -83,8 +83,8 @@ rma.exact.fast <- function(yi,vi,c0=.2*(length(yi)>=6)+.6*(length(yi)<6),level=.
     rownames(CIs) <- c('lower','upper')
     colnames(CIs) <- c0
     CIs <- t(CIs)
-    
-    CI.by.c0 <- abind::abind(CI.by.c0,along=3)   
+
+    CI.by.c0 <- abind::abind(CI.by.c0,along=3)
     dimnames(CI.by.c0)[[1]] <- round(tau2,2)
     dimnames(CI.by.c0)[[3]] <- c0
 
@@ -180,7 +180,7 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 }
 
 ##' Compute a confidence region for grand mean.
-##' 
+##'
 ##' @param yi a vector containing the primary study measurements
 ##' @param vi a vector of the same length as yi containing the variances of the of the primary study measurements contained in yi
 ##' @param c0 a vector containing the mixing parameters for the test statistics; defaults to .2 if length(y)>=6 and .6 otherwise
@@ -201,7 +201,7 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 ##' @seealso \code{\link{rma.exact.fast}} for computing confidence intervals at specified levels, \code{\link{plot.RMA.Exact}}, \code{\link{confint.RMA.Exact}}
 ##' @examples
 ##' set.seed(1)
-##' 
+##'
 ##' K <- 5
 ##' c0 <- 1
 ##' mu0 <- 0
@@ -211,7 +211,7 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 ##' rma0 <- rma.exact(yi=yi,vi=vi)
 ##' plot(rma0)
 ##' confint(rma0)
-##' 
+##'
 ##' ## multiple c0 values
 ##' c0 <- c(0,.25,1)
 ##' tau2 <- 12.5
@@ -220,14 +220,14 @@ rma.exact.c0 <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution=1
 ##' rma0 <- rma.exact(yi=yi,vi=vi,c0=c0)
 ##' plot(rma0)
 ##' confint(rma0)
-##' 
+##'
 ##' ## setting tau2.bounds and other parameters to non-default values
 ##' Z <- matrix(rnorm(K*5e3),nrow=K)
 ##' B <- ncol(Z)
 ##' resolution <- 3e2
 ##' rma0 <- rma.exact(yi=yi,vi=vi,Z=Z,resolution=resolution,c0=c0,tau2.bounds=c(1,120),resolution.tau2=1e3,resolution.mu=1e2)
 ##' plot(rma0)
-##' 
+##'
 ##' c0 <- 1:4
 ##' rma0 <- rma.exact(yi=yi,vi=vi,Z=Z,resolution=resolution,c0=c0,tau2.bounds=c(1,450),resolution.tau2=1e3,resolution.mu=1e2)
 ##' plot(rma0)
@@ -289,7 +289,7 @@ rma.exact <- function(yi,vi,c0=1,mu.bounds=NULL,tau2.bounds=NULL,resolution= 1e2
 
 
 ##' Plot a confidence region given by an RMA.Exact object
-##' 
+##'
 ##' @param rma0 an object of class RMA.Exact
 ##' @param levels the significance levels to plot
 ##' @param mfrow the dimensions of the array of plotting windows for use when rma0 contains regions for multiple weight parameters; defaults to a single row with as many as columns as regions
@@ -320,7 +320,7 @@ plot.RMA.Exact <- function(rma0,levels=c(.01,.02,.05,.1,.15,.2),mfrow=c(1,dim(rm
 ##' Compute a confidence interval for the population mean from an RMA.Exact object
 ##'
 ##' A warning will be issued if the reported endpoints of the confidence interval are near the bounding box.
-##' 
+##'
 ##' @param rma0 an object of class RMA.Exact
 ##' @param levels the significance levels at which the compute the confidence intervals
 ##' @param ... (currently for internal use)
@@ -402,14 +402,14 @@ rma.null=function(tau0, thetahat, varhat, error.mat, c0=1)
     mu.sim=apply(theta.star*weight.dl,2,sum)/apply(weight.dl,2,sum)
 
     test.null=matrix(0, B, L)
-        
+
     for(ll in 1:L)
        {if(min(c0)<Inf) test2.null=apply(theta.star^2/(varhat+tau0)+log(varhat+tau0), 2, sum)-apply( (t(t(theta.star)-mu.sim))^2*weight.dl-log(weight.dl), 2, sum)
-        test1.null=mu.sim^2*apply(weight.dl, 2, sum)    
+        test1.null=mu.sim^2*apply(weight.dl, 2, sum)
         if(c0[ll]<Inf)
           {test.null[,ll]=test2.null+test1.null*c0[ll]}
         if(c0[ll]==Inf)
-          {test.null[,ll]=test1.null}    
+          {test.null[,ll]=test1.null}
         }
 
     return(test.null)
@@ -433,12 +433,12 @@ tau.ci=function(thetahat, varhat, level=0.999)
                                   test.stat=t(weight.mat%*%thetahat)%*%solve(sigma)%*%(weight.mat%*%thetahat)
                                   c0=qchisq(cov, K-1)
                                   return(as.numeric(test.stat)-c0)
-                                  }  
-                                  
+                                  }
+
               if(test.tau(0, thetahat, varhat, 1-level)<=0)
-                ci.upptau=0                 
-                
-              if(test.tau(0, thetahat, varhat, 1-level)>0)  
+                ci.upptau=0
+
+              if(test.tau(0, thetahat, varhat, 1-level)>0)
                 {lower=0
                  upper=(max(thetahat+3*sqrt(varhat))-min(thetahat-3*sqrt(varhat)))^2/2
                  while(test.tau(upper, thetahat, varhat, 1-level)>0)                           {lower=upper
@@ -446,7 +446,7 @@ tau.ci=function(thetahat, varhat, level=0.999)
 
                  ci.upptau=uniroot(test.tau, c(lower, upper), thetaha=thetahat, varhat=varhat, cov=1-level)$root
                  }
-               
+
                 return(c(0, ci.upptau))
                }
 
@@ -461,7 +461,7 @@ set.seed(100)
 error.mat=matrix(rnorm(B*K), K, B)
 
 
-fit.obs=rma.uni(yi=thetahat, vi=varhat, method="DL") 
+fit.obs=rma.uni(yi=thetahat, vi=varhat, method="DL")
 muhat=as.numeric(fit.obs$b)
 tauhat=fit.obs$tau2
 
@@ -517,7 +517,7 @@ delta=sqrt(delta)
 mu.min=(-bb-delta)/2/aa
 mu.max=(-bb+delta)/2/aa
 
-   
+
 ci.low=apply(mu.min,2,min)
 ci.upp=apply(mu.max,2,max)
 
